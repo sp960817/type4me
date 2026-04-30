@@ -47,11 +47,11 @@ enum ElevenLabsProtocol {
         if !config.language.isEmpty {
             queryItems.append(URLQueryItem(name: "language_code", value: config.language))
         }
-        // Keyterm prompting: ElevenLabs supports up to 1000 keyterms
+        // Keyterm prompting: ElevenLabs supports up to 50 keyterms, each ≤20 characters
         let keyterms = options.hotwords
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .prefix(1000)
+            .filter { !$0.isEmpty && $0.count <= 20 }
+            .prefix(50)
         for term in keyterms {
             queryItems.append(URLQueryItem(name: "keyterm", value: term))
         }
