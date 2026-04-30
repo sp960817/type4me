@@ -42,6 +42,7 @@ enum ElevenLabsProtocol {
         var queryItems = [
             URLQueryItem(name: "model_id", value: "scribe_v2_realtime"),
             URLQueryItem(name: "audio_format", value: "pcm_16000"),
+            URLQueryItem(name: "no_verbatim", value: "true"),
         ]
         if !config.language.isEmpty {
             queryItems.append(URLQueryItem(name: "language_code", value: config.language))
