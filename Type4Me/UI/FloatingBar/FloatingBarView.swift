@@ -12,6 +12,7 @@ protocol FloatingBarState: AnyObject, Observable {
     var audioLevel: AudioLevelMeter { get }
     var currentMode: ProcessingMode { get }
     var feedbackMessage: String { get }
+    var feedbackKind: FeedbackKind { get }
     var processingFinishTime: Date? { get }
     var transcriptionText: String { get }
     var recordingStartDate: Date? { get }
@@ -236,17 +237,36 @@ struct FloatingBarView<S: FloatingBarState>: View {
     }
 
     private var doneContent: some View {
-        ZStack {
-            Text(state.feedbackMessage)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white)
+        Group {
+            if let icon = feedbackIcon {
+                HStack(spacing: 10) {
+                    Image(systemName: icon.symbol)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(icon.color)
+                    Text(state.feedbackMessage)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 14)
+            } else {
+                Text(state.feedbackMessage)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .frame(maxWidth: .infinity)
     }
 
     private var errorContent: some View {
         HStack(spacing: 10) {
-            ErrorDot()
+            if let icon = feedbackIcon {
+                Image(systemName: icon.symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(icon.color)
+            } else {
+                ErrorDot()
+            }
 
             Text(state.feedbackMessage)
                 .font(.system(size: 14, weight: .medium))
@@ -254,6 +274,21 @@ struct FloatingBarView<S: FloatingBarState>: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 14)
+    }
+
+    /// SF Symbol + tint for the current feedback kind, or nil for the standard
+    /// look (no leading icon, centered text — the existing `.done`/`.error` UI).
+    private var feedbackIcon: (symbol: String, color: Color)? {
+        switch state.feedbackKind {
+        case .standard:
+            return nil
+        case .macActionSuccess:
+            return ("checkmark.circle.fill", TF.success)
+        case .macActionFailure:
+            return ("xmark.circle.fill", TF.settingsAccentRed)
+        case .macActionUnsure:
+            return ("questionmark.circle.fill", TF.amber)
+        }
     }
 
     // MARK: - Background & Border
@@ -301,7 +336,12 @@ struct FloatingBarView<S: FloatingBarState>: View {
         case .processing:
             .white.opacity(0.07)
         case .done:
-            TF.success.opacity(doneGlow ? 0.3 : 0.08)
+            switch state.feedbackKind {
+            case .macActionUnsure:
+                TF.amber.opacity(0.30)
+            case .macActionSuccess, .macActionFailure, .standard:
+                TF.success.opacity(doneGlow ? 0.3 : 0.08)
+            }
         case .error:
             TF.settingsAccentRed.opacity(0.22)
         case .hidden:
@@ -352,7 +392,9 @@ struct FloatingBarView<S: FloatingBarState>: View {
     }
 
     private func feedbackWidth(for message: String) -> CGFloat {
-        measureText(message) + 66.0
+        // Reserve extra room when an SF Symbol icon is shown (icon + spacing).
+        let iconExtra: CGFloat = feedbackIcon == nil ? 0 : 26
+        return measureText(message) + 66.0 + iconExtra
     }
 
     /// Measure actual rendered width using the same font as the floating bar text.

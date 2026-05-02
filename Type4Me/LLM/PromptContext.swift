@@ -20,9 +20,9 @@ struct PromptContext: Sendable {
         return PromptContext(selectedText: selected, clipboardText: clipboard)
     }
 
-    /// Expand context variables (`{selected}`, `{clipboard}`) in a prompt string.
-    /// Uses single-pass replacement to prevent user content containing `{clipboard}`
-    /// or `{text}` from being expanded as variables.
+    /// Expand context variables (`{selected}`, `{clipboard}`, `{tools_json}`) in
+    /// a prompt string. Uses single-pass replacement to prevent user content
+    /// containing `{clipboard}` or `{text}` from being expanded as variables.
     func expandContextVariables(_ prompt: String) -> String {
         var result = ""
         var remaining = prompt[...]
@@ -37,6 +37,9 @@ struct PromptContext: Sendable {
             } else if remaining.hasPrefix("{clipboard}") {
                 result += clipboardText
                 remaining = remaining[remaining.index(remaining.startIndex, offsetBy: 11)...]
+            } else if remaining.hasPrefix("{tools_json}") {
+                result += ActionRegistry.toolsJSON()
+                remaining = remaining[remaining.index(remaining.startIndex, offsetBy: 12)...]
             } else {
                 result += "{"
                 remaining = remaining[remaining.index(after: remaining.startIndex)...]

@@ -100,9 +100,17 @@ struct ModeStorage {
         }
 
         // Ensure required built-in modes always exist.
+        // direct + formalWriting (the original two) are inserted at their canonical positions
+        // for existing users who already have them; any newly-added builtin is appended at the
+        // end so it doesn't shove itself between the user's customized modes.
         let resultIds = Set(result.map { $0.id })
+        let originalBuiltinIds: Set<UUID> = [
+            ProcessingMode.directId,
+            ProcessingMode.formalWritingId,
+        ]
         for builtin in ProcessingMode.builtins where !resultIds.contains(builtin.id) {
-            if let idx = ProcessingMode.builtins.firstIndex(where: { $0.id == builtin.id }) {
+            if originalBuiltinIds.contains(builtin.id),
+               let idx = ProcessingMode.builtins.firstIndex(where: { $0.id == builtin.id }) {
                 let insertAt = min(idx, result.count)
                 result.insert(builtin, at: insertAt)
             } else {
