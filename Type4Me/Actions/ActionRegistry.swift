@@ -14,6 +14,12 @@ enum ActionRegistry {
         LockScreenAction(),
         SearchWebAction(),
         GetBatteryAction(),
+        MinimizeWindowAction(),
+        FullscreenWindowAction(),
+        CloseWindowAction(),
+        CreateReminderAction(),
+        ScrollDownAction(),
+        ScrollUpAction(),
     ]
 
     /// Renders the JSON tool list block injected into the LLM system prompt.

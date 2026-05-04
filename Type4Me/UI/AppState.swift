@@ -501,6 +501,24 @@ struct ProcessingMode: Codable, Identifiable, Equatable, Hashable {
     用户："锁屏"
     输出：<tool_call>{"name":"lock_screen","arguments":{}}</tool_call>
 
+    用户："最小化窗口" / "minimize window"
+    输出：<tool_call>{"name":"minimize_window","arguments":{}}</tool_call>
+
+    用户："关闭窗口" / "close this window"
+    输出：<tool_call>{"name":"close_window","arguments":{}}</tool_call>
+
+    用户："提醒我明天早上九点开会" / "remind me to call John tomorrow at 9am"
+    输出：<tool_call>{"name":"create_reminder","arguments":{"title":"开会","due":"tomorrow 9am"}}</tool_call>
+
+    用户："提醒我两分钟后检查邮件" / "remind me to check emails in 2 minutes"
+    输出：<tool_call>{"name":"create_reminder","arguments":{"title":"检查邮件","due":"in 2 minutes"}}</tool_call>
+
+    用户："向下滚动" / "scroll down"
+    输出：<tool_call>{"name":"scroll_down","arguments":{}}</tool_call>
+
+    用户："向上滚动" / "scroll up"
+    输出：<tool_call>{"name":"scroll_up","arguments":{}}</tool_call>
+
     用户："今天天气怎么样"
     输出：NO_MATCH
 

@@ -407,6 +407,18 @@ struct ModesSettingsTab: View {
              L("用浏览器搜索", "Open a web search")),
             (L("查看电量", "Check battery"),
              L("显示当前电量", "Show battery status")),
+            (L("最小化窗口", "Minimize window"),
+             L("最小化当前窗口", "Minimize the frontmost window")),
+            (L("全屏", "Fullscreen"),
+             L("切换当前窗口全屏", "Toggle fullscreen for frontmost window")),
+            (L("关闭窗口", "Close window"),
+             L("关闭当前窗口", "Close the frontmost window")),
+            (L("提醒我两分钟后检查邮件", "Remind me to check emails in 2 minutes"),
+             L("创建 Apple 提醒", "Create an Apple Reminder")),
+            (L("向下滚动", "Scroll down"),
+             L("向下翻页", "Page down")),
+            (L("向上滚动", "Scroll up"),
+             L("向上翻页", "Page up")),
         ]
     }
 
