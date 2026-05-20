@@ -1199,10 +1199,18 @@ actor RecognitionSession {
 
     // MARK: - Speculative LLM
 
+    private var isSpeculativeLLMEnabled: Bool {
+        if let override = UserDefaults.standard.object(forKey: "tf_enableSpeculativeLLM") as? Bool {
+            return override
+        }
+        return !KeychainService.selectedLLMProvider.isLocal
+    }
+
     /// Debounce: after each transcript update, wait 800ms of silence before
     /// speculatively sending current text to LLM. If the user is still
     /// speaking, the timer resets.
     private func scheduleSpeculativeLLM() {
+        guard isSpeculativeLLMEnabled else { return }
         #if HAS_CLOUD_SUBSCRIPTION
         if isCloudMode { return }
         #endif
