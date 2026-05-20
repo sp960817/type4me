@@ -37,12 +37,7 @@ actor SenseVoiceServerManager {
         syncHotwordsFile()
         Task {
             let mgr = shared
-            let q3WasRunning = await mgr.qwen3Port != nil
-            if q3WasRunning {
-                await mgr.stop()
-                try? await mgr.start()
-                DebugFileLogger.log("Qwen3 server restarted for hotword update")
-            }
+            await mgr.restartForHotwordUpdate()
         }
     }
 
@@ -60,6 +55,8 @@ actor SenseVoiceServerManager {
     private var qwen3StdoutPipe: Pipe?
     private var qwen3CrashRestarts = 0
     private let maxCrashRestarts = 3
+    private var qwen3Starting = false
+    private var hotwordRestartInFlight = false
     /// Set to true when we intentionally stop the process (prevents crash handler from firing).
     private var intentionalStop = false
 
@@ -79,7 +76,17 @@ actor SenseVoiceServerManager {
 
         DebugFileLogger.log("start(): q3=\(qwen3Enabled)")
 
-        if qwen3Enabled && qwen3Process == nil {
+        if qwen3Enabled {
+            if qwen3Starting {
+                DebugFileLogger.log("start(): Qwen3 start already in progress")
+                return
+            }
+            if let proc = qwen3Process, proc.isRunning, qwen3Port != nil {
+                DebugFileLogger.log("start(): Qwen3 already running q3Port=\(qwen3Port ?? -1)")
+                return
+            }
+            qwen3Starting = true
+            defer { qwen3Starting = false }
             do {
                 try await launchQwen3Server()
             } catch {
@@ -127,7 +134,8 @@ actor SenseVoiceServerManager {
 
         proc.terminationHandler = { [weak self] terminatedProc in
             let status = terminatedProc.terminationStatus
-            Task { await self?.handleQwen3Termination(status: status) }
+            let pid = terminatedProc.processIdentifier
+            Task { await self?.handleQwen3Termination(pid: pid, status: status) }
         }
 
         let portResult = await readPortFromStdout(pipe: pipe, timeout: 120)
@@ -167,7 +175,9 @@ actor SenseVoiceServerManager {
 
     /// Start the Qwen3-ASR server independently.
     func startQwen3() async throws {
-        guard qwen3Process == nil else { return }
+        guard qwen3Process == nil, !qwen3Starting else { return }
+        qwen3Starting = true
+        defer { qwen3Starting = false }
         try await launchQwen3Server()
     }
 
@@ -212,7 +222,11 @@ actor SenseVoiceServerManager {
 
     // MARK: - Crash Handling
 
-    private func handleQwen3Termination(status: Int32) {
+    private func handleQwen3Termination(pid: Int32, status: Int32) {
+        if let current = qwen3Process, current.processIdentifier != pid {
+            DebugFileLogger.log("Ignored stale Qwen3 termination pid=\(pid)")
+            return
+        }
         guard !intentionalStop else { return }
         // Abnormal exit: clear state and optionally restart
         NSLog("[SenseVoiceServerManager] Qwen3 process crashed with exit status %d", status)
@@ -239,6 +253,25 @@ actor SenseVoiceServerManager {
         } else {
             NSLog("[SenseVoiceServerManager] Qwen3 crash restart limit reached (%d)", maxCrashRestarts)
             DebugFileLogger.log("Qwen3 crash restart limit reached")
+        }
+    }
+
+    private func restartForHotwordUpdate() async {
+        guard qwen3Port != nil || qwen3Process != nil else { return }
+        guard !hotwordRestartInFlight else {
+            DebugFileLogger.log("Qwen3 hotword restart skipped: already in flight")
+            return
+        }
+        hotwordRestartInFlight = true
+        defer { hotwordRestartInFlight = false }
+
+        stop()
+        try? await Task.sleep(for: .milliseconds(300))
+        do {
+            try await start()
+            DebugFileLogger.log("Qwen3 server restarted for hotword update")
+        } catch {
+            DebugFileLogger.log("Qwen3 hotword restart failed: \(error)")
         }
     }
 
