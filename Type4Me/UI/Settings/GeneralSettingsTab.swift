@@ -20,7 +20,7 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
     @AppStorage("tf_showDockIcon") private var showDockIcon = true
     @AppStorage("tf_bypassProxy") private var bypassProxy = "off"
     @AppStorage("tf_stripTrailingPunctuation") private var stripTrailingPunctuation = "off"
-    @AppStorage("tf_hoverTranscriptPreview") private var hoverTranscriptPreview = true
+    @AppStorage(RecordingEffectLayout.storageKey) private var showRecordingEffectText = RecordingEffectLayout.defaultShowsText
     @AppStorage("tf_micKeepAlive") private var micKeepAlive = false
     @AppStorage("tf_selectedMicrophoneUID") private var selectedMicrophoneUID = ""
     @AppStorage("tf_selectedSpeakerUID") private var selectedSpeakerUID = ""
@@ -57,11 +57,21 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
 
                 SettingsDivider()
 
-                // Row 2: 录音动效 / 麦克风保活
+                // Row 2: 录音动效 / 动效文字
                 HStack(alignment: .top, spacing: 16) {
                     visualStyleRow
                         .frame(maxWidth: .infinity)
+                    recordingEffectTextRow
+                        .frame(maxWidth: .infinity)
+                }
+
+                SettingsDivider()
+
+                // Row 3: 麦克风保活
+                HStack(alignment: .top, spacing: 16) {
                     micKeepAliveRow
+                        .frame(maxWidth: .infinity)
+                    Spacer()
                         .frame(maxWidth: .infinity)
                 }
 
@@ -88,11 +98,11 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
 
                 SettingsDivider()
 
-                // Row 2: 去句末标点 / 悬停文字预览
+                // Row 2: 去句末标点
                 HStack(alignment: .top, spacing: 16) {
                     stripPunctuationRow
                         .frame(maxWidth: .infinity)
-                    hoverPreviewRow
+                    Spacer()
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -480,24 +490,16 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
         .padding(.vertical, 6)
     }
 
-    private var hoverPreviewRow: some View {
+    private var recordingEffectTextRow: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Text(L("悬停文字预览", "Hover Text Preview").uppercased())
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(TF.settingsTextTertiary)
-                Text("|")
-                    .font(.system(size: 10))
-                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.5))
-                Text(L("鼠标悬停悬浮条时显示完整文本", "Show full text when hovering the bar"))
-                    .font(.system(size: 10))
-                    .foregroundStyle(TF.settingsTextTertiary)
-            }
+            Text(L("录音动效文字", "Recording Effect Text").uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(TF.settingsTextTertiary)
             settingsDropdown(
                 selection: Binding(
-                    get: { hoverTranscriptPreview ? "on" : "off" },
-                    set: { hoverTranscriptPreview = $0 == "on" }
+                    get: { showRecordingEffectText ? "on" : "off" },
+                    set: { showRecordingEffectText = $0 == "on" }
                 ),
                 options: [
                     ("on", L("开启", "On")),

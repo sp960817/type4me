@@ -82,7 +82,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DebugFileLogger.startSession()
         DebugFileLogger.log("applicationDidFinishLaunching")
-        floatingBarController = FloatingBarController(state: appState)
+        floatingBarController = FloatingBarController(
+            state: appState,
+            onCancelRecording: { [weak self] in
+                self?.cancelRecordingFromFloatingBar()
+            }
+        )
 
         // Bridge ASR events → AppState for floating bar display
         let session = self.session
@@ -636,6 +641,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         hotkeyManager.resetActiveState()
+    }
+
+    private func cancelRecordingFromFloatingBar() {
+        let phase = appState.barPhase
+        guard phase == .recording || phase == .preparing else { return }
+
+        DebugFileLogger.log("floating bar cancel tap phase=\(phase)")
+        hotkeyManager.isProcessing = false
+        hotkeyManager.resetActiveState()
+        appState.showCancelled()
+
+        Task {
+            await session.cancelRecording()
+        }
     }
 
     private func userFacingMessage(for error: Error) -> String {

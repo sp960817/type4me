@@ -32,33 +32,28 @@ struct FloatingBarView<S: FloatingBarState>: View {
     let state: S
 
     @ObservedObject private var themeStore = ThemeStore.shared
+    var onCancelRecording: (() -> Void)?
 
     @State private var breathe = false
     @State private var doneGlow = true
-    /// High-water mark: only grows during recording, never shrinks (prevents ASR correction jitter)
-    @State private var recordingPeakWidth: CGFloat = TF.barHeight
+    /// High-water mark: only grows during recording, never shrinks on small ASR corrections.
+    @State private var recordingPeakWidth: CGFloat = RecordingEffectLayout.defaultCompactWidth(from: TF.barWidthCompact)
     @State private var processingStartDate: Date?
     @State private var doneStartDate: Date?
-    @State private var isHovered = false
-    @AppStorage("tf_hoverTranscriptPreview") private var hoverTranscriptPreview = true
+    @AppStorage(RecordingEffectLayout.storageKey) private var showRecordingEffectText = RecordingEffectLayout.defaultShowsText
 
-    // MARK: - Transcript Popup
-
-    private var showTranscriptPopup: Bool {
-        guard hoverTranscriptPreview, isHovered, state.barPhase == .recording, !state.segments.isEmpty else { return false }
-        let textWidth = measureText(state.transcriptionText)
-        return textWidth + 66 > TF.barWidth
-    }
+    private let recordingEffectLayout = RecordingEffectLayout(
+        compactWidth: RecordingEffectLayout.defaultCompactWidth(from: TF.barWidthCompact),
+        maxWidth: TF.barWidth,
+        textPaddingWidth: RecordingEffectLayout.defaultTextPaddingWidth
+    )
 
     private var capsuleWidth: CGFloat {
         switch state.barPhase {
         case .preparing:
             return TF.barHeight
         case .recording:
-            if state.segments.isEmpty {
-                return state.isQwen3OnlyMode ? 110 : TF.barHeight
-            }
-            return recordingPeakWidth
+            return recordingWidth
         case .processing:
             return measureText(state.effectiveProcessingLabel) + 66.0
         case .done:
@@ -71,15 +66,7 @@ struct FloatingBarView<S: FloatingBarState>: View {
     }
 
     var body: some View {
-        VStack(spacing: TF.transcriptPopupGap) {
-            if showTranscriptPopup {
-                transcriptPopup
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: 0.95, anchor: .bottom).combined(with: .opacity),
-                        removal: .opacity
-                    ))
-            }
-
+        VStack(spacing: 0) {
             if state.barPhase != .hidden {
                 capsuleBar
                 .transition(.asymmetric(
@@ -88,38 +75,17 @@ struct FloatingBarView<S: FloatingBarState>: View {
                 ))
             }
         }
-        .background {
-            FloatingBarHoverTracker { hovered in
-                withAnimation(TF.springSnappy) {
-                    isHovered = hovered
-                }
-            }
-        }
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(TF.springSnappy, value: state.barPhase != .hidden)
-        .animation(TF.springSnappy, value: showTranscriptPopup)
         .onChange(of: state.barPhase) { _, newPhase in
             handlePhaseChange(newPhase)
         }
         .onChange(of: state.segments) { _, newSegments in
-            guard state.barPhase == .recording else { return }
-            let text = newSegments.map(\.text).joined()
-            let textWidth = measureText(text)
-            let needed = min(TF.barWidth, max(TF.barHeight, textWidth + 66.0))
-            if needed > recordingPeakWidth {
-                // Growing: fixed velocity 250pt/s
-                let distance = needed - recordingPeakWidth
-                let duration = max(0.12, Double(distance / 250.0))
-                withAnimation(.linear(duration: duration)) {
-                    recordingPeakWidth = needed
-                }
-            } else if recordingPeakWidth - needed > 30 {
-                // Large correction (hotword etc.): allow shrink
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    recordingPeakWidth = needed
-                }
-            }
+            updateRecordingPeakWidth(for: newSegments, animated: true)
+        }
+        .onChange(of: showRecordingEffectText) { _, _ in
+            updateRecordingPeakWidth(for: state.segments, animated: true)
         }
         .id(themeStore.current)
     }
@@ -193,45 +159,74 @@ struct FloatingBarView<S: FloatingBarState>: View {
 
     private var recordingContent: some View {
         HStack(spacing: 10) {
-            // Module 1: dot (fixed position, 14pt from left edge)
-            RecordingDot(meter: state.audioLevel)
+            Button {
+                onCancelRecording?()
+            } label: {
+                RecordingDot(meter: state.audioLevel)
+            }
+            .buttonStyle(.plain)
+            .contentShape(Circle())
+            .accessibilityLabel(Text(L("取消录音", "Cancel recording")))
+            .help(L("取消录音", "Cancel recording"))
 
-            // Module 2: text container (fills remaining space, grows with frame)
-            // Uses overlay so text sizing never affects HStack layout
-            if state.segments.isEmpty && state.isQwen3OnlyMode {
-                Text(L("录音中", "Recording"))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
-            } else if !state.segments.isEmpty {
-                Color.clear
-                    .overlay(alignment: .trailing) {
-                        Text(state.transcriptionText)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                    .mask {
-                        if recordingPeakWidth >= TF.barWidth {
-                            HStack(spacing: 0) {
-                                LinearGradient(
-                                    colors: [.clear, .white],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                                .frame(width: 12)
-                                Rectangle()
-                            }
-                        } else {
-                            Rectangle()
-                        }
-                    }
-                    .padding(.trailing, 4)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
+            if recordingTextContent != .hidden {
+                recordingTranscriptContent
+            } else {
+                Spacer(minLength: 0)
             }
         }
         .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private var recordingTranscriptContent: some View {
+        if recordingTextContent == .qwenPlaceholder {
+            Text(recordingText)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white)
+        } else if recordingTextContent == .transcript {
+            Color.clear
+                .overlay(alignment: .trailing) {
+                    Text(state.transcriptionText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .mask {
+                    if recordingPeakWidth >= TF.barWidth {
+                        HStack(spacing: 0) {
+                            LinearGradient(
+                                colors: [.clear, .white],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                            .frame(width: 12)
+                            Rectangle()
+                        }
+                    } else {
+                        Rectangle()
+                    }
+                }
+                .padding(.trailing, 4)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+        } else {
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var recordingTextContent: RecordingEffectLayout.Content {
+        RecordingEffectLayout.content(
+            showText: showRecordingEffectText,
+            hasSegments: !state.segments.isEmpty,
+            isQwen3OnlyMode: state.isQwen3OnlyMode
+        )
+    }
+
+    private var recordingText: String {
+        recordingText(for: recordingTextContent, segments: state.segments)
     }
 
     private var processingContent: some View {
@@ -359,16 +354,9 @@ struct FloatingBarView<S: FloatingBarState>: View {
     // MARK: - Phase Transitions
 
     private func handlePhaseChange(_ phase: FloatingBarPhase) {
-        // Reset hover state on panel show/hide boundaries.
-        // NSTrackingArea suspends events when the view is hidden (panel orderOut)
-        // instead of firing mouseExited, so isHovered would otherwise leak across
-        // recording sessions and auto-show the popup without any actual hover.
-        if phase == .preparing || phase == .hidden {
-            isHovered = false
-        }
         switch phase {
         case .preparing:
-            recordingPeakWidth = TF.barHeight
+            recordingPeakWidth = recordingEffectLayout.compactWidth
             processingStartDate = nil
             doneStartDate = nil
             breathe = false
@@ -376,7 +364,11 @@ struct FloatingBarView<S: FloatingBarState>: View {
                 breathe = true
             }
         case .recording:
-            recordingPeakWidth = TF.barHeight
+            recordingPeakWidth = recordingEffectLayout.nextPeakWidth(
+                content: recordingTextContent,
+                currentPeak: recordingEffectLayout.compactWidth,
+                textWidth: measureText(recordingText)
+            )
             breathe = false
             withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
                 breathe = true
@@ -398,6 +390,53 @@ struct FloatingBarView<S: FloatingBarState>: View {
         }
     }
 
+    private var recordingWidth: CGFloat {
+        recordingEffectLayout.recordingWidth(
+            content: recordingTextContent,
+            peakWidth: recordingPeakWidth
+        )
+    }
+
+    private func updateRecordingPeakWidth(for segments: [TranscriptionSegment], animated: Bool) {
+        guard state.barPhase == .recording else { return }
+
+        let content = RecordingEffectLayout.content(
+            showText: showRecordingEffectText,
+            hasSegments: !segments.isEmpty,
+            isQwen3OnlyMode: state.isQwen3OnlyMode
+        )
+        let text = recordingText(for: content, segments: segments)
+        let needed = recordingEffectLayout.nextPeakWidth(
+            content: content,
+            currentPeak: recordingPeakWidth,
+            textWidth: measureText(text)
+        )
+        guard needed != recordingPeakWidth else { return }
+
+        let update = {
+            recordingPeakWidth = needed
+        }
+
+        if needed > recordingPeakWidth {
+            let distance = needed - recordingPeakWidth
+            let duration = max(0.12, Double(distance / 250.0))
+            withAnimation(animated ? .linear(duration: duration) : nil, update)
+        } else if recordingPeakWidth - needed > 30 {
+            withAnimation(animated ? .easeInOut(duration: 0.2) : nil, update)
+        }
+    }
+
+    private func recordingText(for content: RecordingEffectLayout.Content, segments: [TranscriptionSegment]) -> String {
+        switch content {
+        case .hidden:
+            return ""
+        case .qwenPlaceholder:
+            return L("录音中", "Recording")
+        case .transcript:
+            return segments.map(\.text).joined()
+        }
+    }
+
     private func feedbackWidth(for message: String) -> CGFloat {
         // Reserve extra room when an SF Symbol icon is shown (icon + spacing).
         let iconExtra: CGFloat = feedbackIcon == nil ? 0 : 26
@@ -407,24 +446,6 @@ struct FloatingBarView<S: FloatingBarState>: View {
     /// Measure actual rendered width using the same font as the floating bar text.
     private func measureText(_ string: String) -> CGFloat {
         ceil((string as NSString).size(withAttributes: [.font: floatingBarFont]).width)
-    }
-
-    // MARK: - Transcript Popup View
-
-    private var transcriptPopup: some View {
-        Text(state.transcriptionText)
-            .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(.white)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .frame(width: TF.barWidth)
-            .background(
-                RoundedRectangle(cornerRadius: TF.transcriptPopupCorner, style: .continuous)
-                    .fill(Color(white: 0.08, opacity: 0.78))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: TF.transcriptPopupCorner, style: .continuous))
-            .shadow(color: Color.black.opacity(0.3), radius: 8, y: -2)
     }
 }
 
@@ -967,58 +988,5 @@ private final class LevelTimeline {
         }
         levels[levels.count - 1] = currentLevel
         return levels
-    }
-}
-
-// MARK: - Hover Tracking (works even when app is not active)
-
-/// Uses NSTrackingArea with `.activeAlways` so hover fires on a non-key,
-/// non-activating NSPanel regardless of which app is in the foreground.
-struct FloatingBarHoverTracker: NSViewRepresentable {
-    let onHoverChanged: (Bool) -> Void
-
-    func makeNSView(context: Context) -> HoverTrackingNSView {
-        let view = HoverTrackingNSView()
-        view.onHoverChanged = onHoverChanged
-        return view
-    }
-
-    func updateNSView(_ nsView: HoverTrackingNSView, context: Context) {
-        nsView.onHoverChanged = onHoverChanged
-    }
-}
-
-final class HoverTrackingNSView: NSView {
-    var onHoverChanged: ((Bool) -> Void)?
-    private var enterWorkItem: DispatchWorkItem?
-
-    override func updateTrackingAreas() {
-        for area in trackingAreas { removeTrackingArea(area) }
-        addTrackingArea(NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self
-        ))
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        enterWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self, let window = self.window else { return }
-            // Re-check mouse position at trigger time: updateTrackingAreas()
-            // sends synthetic mouseEntered when the tracking area is recreated
-            // with the cursor inside (e.g. bar grows during recording).
-            let mouseInView = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
-            guard self.bounds.contains(mouseInView) else { return }
-            self.onHoverChanged?(true)
-        }
-        enterWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        enterWorkItem?.cancel()
-        onHoverChanged?(false)
     }
 }
