@@ -100,6 +100,9 @@ enum RecognitionEvent: Sendable {
     case processingResult(text: String)
     case processingLabelOverride(String)
     case finalized(text: String, injection: InjectionOutcome)
+    /// Mac Action mode: action result to surface in the floating bar with
+    /// status-specific icon and color, holding for ~3 seconds.
+    case macActionResult(message: String, status: MacActionResultStatus)
 }
 
 struct LLMConfig: Sendable {

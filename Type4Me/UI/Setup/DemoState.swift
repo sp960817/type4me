@@ -14,6 +14,7 @@ final class DemoState {
     @ObservationIgnored let audioLevel = AudioLevelMeter()
     var currentMode: ProcessingMode = .direct
     var feedbackMessage: String = L("已完成", "Done")
+    var feedbackKind: FeedbackKind = .standard
     var processingFinishTime: Date?
     var recordingStartDate: Date?
 

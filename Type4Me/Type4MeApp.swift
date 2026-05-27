@@ -149,6 +149,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         appState.finalize(text: text, outcome: injection)
                         self.hotkeyManager.isProcessing = false
                         self.safeResetHotkeyState()
+                    case .macActionResult(let message, let status):
+                        appState.showMacActionResult(message: message, status: status)
+                        self.hotkeyManager.isProcessing = false
+                        self.safeResetHotkeyState()
                     case .error(let error):
                         appState.showError(self.userFacingMessage(for: error))
                         self.hotkeyManager.isProcessing = false

@@ -11,6 +11,16 @@ enum FloatingBarPhase: Equatable {
     case error
 }
 
+/// Visual variant of the floating-bar feedback. Lets the bar prepend a status
+/// icon (and tint the border) without introducing additional phases — the phase
+/// machine still drives layout, this just modulates the look of `.done`/`.error`.
+enum FeedbackKind: Equatable {
+    case standard
+    case macActionSuccess
+    case macActionFailure
+    case macActionUnsure
+}
+
 // MARK: - Transcription Segment
 
 struct TranscriptionSegment: Identifiable, Equatable {
@@ -97,6 +107,7 @@ struct ProcessingMode: Codable, Identifiable, Equatable, Hashable {
     static let directId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     static let smartDirectId = UUID(uuidString: "00000000-0000-0000-0000-000000000006")!
     static let translateId = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    static let macActionId = UUID(uuidString: "00000000-0000-0000-0000-000000000008")!
     static var direct: ProcessingMode {
         ProcessingMode(
             id: directId,
@@ -449,6 +460,83 @@ struct ProcessingMode: Codable, Identifiable, Equatable, Hashable {
         )
     }
 
+    static let macActionPromptTemplate = #"""
+    你是一个 macOS 操作助手。用户通过语音口述了一个意图，你必须严格按格式调用工具，不要解释。
+
+    # 可用工具
+
+    <tools>
+    {tools_json}
+    </tools>
+
+    # 输出格式（极其重要）
+
+    匹配到工具时，**仅**输出一行，**必须**包含开始和结束标签：
+    <tool_call>{"name":"tool_name","arguments":{"key":"value"}}</tool_call>
+
+    不匹配任何工具时，**仅**输出：NO_MATCH
+
+    禁止输出任何其它文字、解释、代码块标记。
+
+    # 示例
+
+    用户："打开 Safari" / "Open Safari" / "open up Safari"
+    输出：<tool_call>{"name":"open_app","arguments":{"app":"Safari"}}</tool_call>
+
+    用户："打开微信"
+    输出：<tool_call>{"name":"open_app","arguments":{"app":"WeChat"}}</tool_call>
+
+    用户："音量调到 30" / "set volume to 30"
+    输出：<tool_call>{"name":"set_volume","arguments":{"level":30}}</tool_call>
+
+    用户："切换深色模式" / "toggle dark mode"
+    输出：<tool_call>{"name":"toggle_dark_mode","arguments":{}}</tool_call>
+
+    用户："截图" / "take a screenshot"
+    输出：<tool_call>{"name":"screenshot","arguments":{}}</tool_call>
+
+    用户："搜一下 swiftui 教程" / "search swiftui tutorial"
+    输出：<tool_call>{"name":"search_web","arguments":{"query":"swiftui 教程"}}</tool_call>
+
+    用户："锁屏"
+    输出：<tool_call>{"name":"lock_screen","arguments":{}}</tool_call>
+
+    用户："最小化窗口" / "minimize window"
+    输出：<tool_call>{"name":"minimize_window","arguments":{}}</tool_call>
+
+    用户："关闭窗口" / "close this window"
+    输出：<tool_call>{"name":"close_window","arguments":{}}</tool_call>
+
+    用户："提醒我明天早上九点开会" / "remind me to call John tomorrow at 9am"
+    输出：<tool_call>{"name":"create_reminder","arguments":{"title":"开会","due":"tomorrow 9am"}}</tool_call>
+
+    用户："提醒我两分钟后检查邮件" / "remind me to check emails in 2 minutes"
+    输出：<tool_call>{"name":"create_reminder","arguments":{"title":"检查邮件","due":"in 2 minutes"}}</tool_call>
+
+    用户："向下滚动" / "scroll down"
+    输出：<tool_call>{"name":"scroll_down","arguments":{}}</tool_call>
+
+    用户："向上滚动" / "scroll up"
+    输出：<tool_call>{"name":"scroll_up","arguments":{}}</tool_call>
+
+    用户："今天天气怎么样"
+    输出：NO_MATCH
+
+    # 用户语音
+    {text}
+    """#
+
+    static var macAction: ProcessingMode {
+        ProcessingMode(
+            id: macActionId,
+            name: L("Mac 操作", "Mac Action"),
+            prompt: macActionPromptTemplate,
+            isBuiltin: true,
+            processingLabel: L("执行中", "Executing"),
+            hotkeyCode: 23, hotkeyModifiers: 524288, hotkeyStyle: .toggle
+        )
+    }
+
     static let agentModePromptTemplate = #"""
     # Role
     你是一个"直接交付"型 AI 助手。用户通过语音口述一个需求，你的任务是**直接给出最终成品**，让用户能立即粘贴到目标场景使用。
@@ -599,8 +687,8 @@ struct ProcessingMode: Codable, Identifiable, Equatable, Hashable {
         )
     }
 
-    static var builtins: [ProcessingMode] { [.direct, .formalWriting] }
-    static var defaults: [ProcessingMode] { [.direct, .formalWriting, .promptOptimize, .translate, .agentMode, .commandMode] }
+    static var builtins: [ProcessingMode] { [.direct, .formalWriting, .macAction] }
+    static var defaults: [ProcessingMode] { [.direct, .formalWriting, .promptOptimize, .translate, .agentMode, .commandMode, .macAction] }
 }
 
 // MARK: - Audio Level (isolated from @Observable to avoid high-frequency view invalidation)
@@ -626,6 +714,7 @@ final class AppState {
     var recordingStartDate: Date?
     var availableModes: [ProcessingMode]
     var feedbackMessage: String = L("已完成", "Done")
+    var feedbackKind: FeedbackKind = .standard
     var processingLabelOverride: String?
     var processingFinishTime: Date?
     var isQwen3OnlyMode: Bool {
@@ -675,6 +764,7 @@ final class AppState {
         audioLevel.current = 0
         recordingStartDate = nil
         feedbackMessage = L("已完成", "Done")
+        feedbackKind = .standard
         processingLabelOverride = nil
         barPhase = .preparing
         onShowPanel?()
@@ -774,6 +864,31 @@ final class AppState {
         recordingStartDate = nil
         barPhase = .done
         scheduleAutoHide(for: .done, delay: .seconds(0.8))
+    }
+
+    /// Display a Mac Action result in the floating bar with status-specific
+    /// icon/color and a 3-second hold (instead of the usual 0.5s `.done`).
+    /// `.failure` routes through `.error` to inherit the red gradient background;
+    /// `.success` and `.unsure` reuse `.done` and rely on `feedbackKind` to
+    /// differentiate (green check vs amber question mark).
+    func showMacActionResult(message: String, status: MacActionResultStatus) {
+        segments = []
+        audioLevel.current = 0
+        recordingStartDate = nil
+        feedbackMessage = message
+        switch status {
+        case .success:
+            feedbackKind = .macActionSuccess
+            barPhase = .done
+        case .failure:
+            feedbackKind = .macActionFailure
+            barPhase = .error
+        case .unsure:
+            feedbackKind = .macActionUnsure
+            barPhase = .done
+        }
+        onShowPanel?()
+        scheduleAutoHide(for: barPhase, delay: .seconds(3))
     }
 
     // MARK: Computed

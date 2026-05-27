@@ -541,6 +541,76 @@ actor RecognitionSession {
         DebugFileLogger.log("abortInjection: injection will be skipped")
     }
 
+    /// Parse a Mac Action LLM reply for a `<tool_call>{...}</tool_call>`, dispatch
+    /// the action via `ActionRegistry`, and return both the user-facing message
+    /// and a status. The floating bar uses the status to pick an icon/color
+    /// (✓ green / ✗ red / ? amber).
+    private func dispatchMacAction(llmReply: String) async -> (message: String, status: MacActionResultStatus) {
+        guard let toolCall = ToolCallParser.parse(llmReply) else {
+            DebugFileLogger.log("macAction: no tool_call in LLM reply: \(llmReply.prefix(120))")
+            return (L("未匹配到操作", "No matching action"), .unsure)
+        }
+        DebugFileLogger.log("macAction: dispatching \(toolCall.name) args=\(toolCall.arguments)")
+        guard let result = await ActionRegistry.dispatch(name: toolCall.name, args: toolCall.arguments) else {
+            DebugFileLogger.log("macAction: unknown action name \(toolCall.name)")
+            return (L("未知操作：\(toolCall.name)", "Unknown action: \(toolCall.name)"), .failure)
+        }
+        if result.success {
+            DebugFileLogger.log("macAction: success \(toolCall.name): \(result.displayMessage)")
+            return (result.displayMessage, .success)
+        } else {
+            DebugFileLogger.log("macAction: failed \(toolCall.name): \(result.errorMessage ?? "")")
+            return (result.errorMessage ?? L("操作失败", "Action failed"), .failure)
+        }
+    }
+
+    /// Persist history, emit floating-bar event + `.completed`, and reset
+    /// session state — the post-LLM finishing path used when Mac Action mode
+    /// dispatched (or attempted to dispatch) an action. This deliberately skips
+    /// the text-injection block that the normal post-LLM path runs.
+    private func completeMacAction(
+        message: String,
+        status: MacActionResultStatus,
+        rawText: String,
+        recordingStartTime: Date?,
+        activeProvider: ASRProvider,
+        myGeneration: Int
+    ) async {
+        let recordId = UUID().uuidString
+        let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+        let historyStatus: String = {
+            switch status {
+            case .success: return "action_success"
+            case .failure: return "action_failed"
+            case .unsure:  return "action_unmatched"
+            }
+        }()
+        await historyStore.insert(HistoryRecord(
+            id: recordId,
+            createdAt: Date(),
+            durationSeconds: duration,
+            rawText: rawText,
+            processingMode: currentMode.name,
+            processedText: message,
+            finalText: message,
+            status: historyStatus,
+            characterCount: message.count,
+            asrProvider: activeProvider.displayName
+        ))
+
+        onASREvent?(.macActionResult(message: message, status: status))
+        onASREvent?(.completed)
+
+        if sessionGeneration == myGeneration, state != .idle {
+            state = .idle
+            hasEmittedReadyForCurrentSession = false
+            currentTranscript = .empty
+            warmUpASRConnection()
+        }
+        resetSpeculativeLLM()
+        SystemVolumeManager.restore()
+    }
+
     func stopRecording() async {
         let myGeneration = sessionGeneration
         guard state == .recording else {
@@ -879,6 +949,18 @@ actor RecognitionSession {
                 if let result = earlyResult, !result.isEmpty {
                     DebugFileLogger.log("stop: early LLM result received \(result.count) chars +\(ContinuousClock.now - stopT0)")
                     let cleaned = result.collapsingExtraSpaces
+                    if currentMode.id == ProcessingMode.macActionId {
+                        let action = await dispatchMacAction(llmReply: cleaned)
+                        await completeMacAction(
+                            message: action.message,
+                            status: action.status,
+                            rawText: rawText,
+                            recordingStartTime: recordingStartTime,
+                            activeProvider: activeProvider,
+                            myGeneration: myGeneration
+                        )
+                        return
+                    }
                     processedText = cleaned
                     finalText = cleaned
                     onASREvent?(.processingResult(text: cleaned))
@@ -928,6 +1010,18 @@ actor RecognitionSession {
 
                     if let result = llmResult {
                         let cleaned = result.collapsingExtraSpaces
+                        if currentMode.id == ProcessingMode.macActionId {
+                            let action = await dispatchMacAction(llmReply: cleaned)
+                            await completeMacAction(
+                                message: action.message,
+                                status: action.status,
+                                rawText: rawText,
+                                recordingStartTime: recordingStartTime,
+                                activeProvider: activeProvider,
+                                myGeneration: myGeneration
+                            )
+                            return
+                        }
                         processedText = cleaned
                         finalText = cleaned
                         onASREvent?(.processingResult(text: cleaned))
@@ -1106,7 +1200,7 @@ actor RecognitionSession {
                 Task { await self.stopRecording() }
             }
 
-        case .processingResult, .processingLabelOverride, .finalized:
+        case .processingResult, .processingLabelOverride, .finalized, .macActionResult:
             break
         }
     }

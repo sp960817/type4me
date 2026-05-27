@@ -306,7 +306,7 @@ struct ModesSettingsTab: View {
     private func builtinModeDetail(_ mode: ProcessingMode) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 6) {
-                Image(systemName: mode.id == ProcessingMode.formalWritingId ? "wand.and.stars" : "bolt.fill")
+                Image(systemName: builtinIcon(for: mode))
                     .font(.system(size: 14))
                     .foregroundStyle(TF.settingsAccentAmber)
                 Text(mode.name)
@@ -320,14 +320,106 @@ struct ModesSettingsTab: View {
                     .background(Capsule().fill(TF.settingsCardAlt))
             }
 
-            Text(L("直接使用语音识别 API，识别完成后不做处理、直接粘贴。适合非正式场合、无需纠正口头表达的场景，输入流程更丝滑。",
-                     "Uses the ASR API directly, pastes raw output without post-processing. Best for informal contexts where oral expressions don't need correction."))
+            if mode.id == ProcessingMode.macActionId {
+                macActionDescription
+            } else {
+                Text(L("直接使用语音识别 API，识别完成后不做处理、直接粘贴。适合非正式场合、无需纠正口头表达的场景，输入流程更丝滑。",
+                         "Uses the ASR API directly, pastes raw output without post-processing. Best for informal contexts where oral expressions don't need correction."))
+                    .font(.system(size: 12))
+                    .foregroundStyle(TF.settingsTextSecondary)
+                    .lineSpacing(3)
+            }
+
+            Spacer()
+        }
+    }
+
+    private func builtinIcon(for mode: ProcessingMode) -> String {
+        switch mode.id {
+        case ProcessingMode.formalWritingId: return "wand.and.stars"
+        case ProcessingMode.macActionId: return "command.circle.fill"
+        default: return "bolt.fill"
+        }
+    }
+
+    private var macActionDescription: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L(
+                "用语音直接触发 macOS 操作，不再粘贴文本。需要先在「高级 → LLM」中配置 LLM 提供商。",
+                "Trigger macOS actions by voice instead of typing text. Requires an LLM provider configured under Advanced → LLM."
+            ))
                 .font(.system(size: 12))
                 .foregroundStyle(TF.settingsTextSecondary)
                 .lineSpacing(3)
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("支持的操作", "Supported actions"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TF.settingsText)
+                ForEach(macActionExamples, id: \.0) { phrase, action in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•")
+                            .font(.system(size: 11))
+                            .foregroundStyle(TF.settingsTextTertiary)
+                        Text("\u{201C}\(phrase)\u{201D}")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(TF.settingsText)
+                        Text("→")
+                            .font(.system(size: 11))
+                            .foregroundStyle(TF.settingsTextTertiary)
+                        Text(action)
+                            .font(.system(size: 11))
+                            .foregroundStyle(TF.settingsTextSecondary)
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+
+            Text(L(
+                "首次使用某些操作时，macOS 可能弹出「辅助功能 / 自动化」授权请求。未匹配到任何操作时会提示，不会粘贴任何文本。",
+                "macOS may ask for Accessibility/Automation permission the first time you use certain actions. When no action matches, you'll see a notice and nothing is typed."
+            ))
+                .font(.system(size: 11))
+                .foregroundStyle(TF.settingsTextTertiary)
+                .lineSpacing(2)
         }
+    }
+
+    private var macActionExamples: [(String, String)] {
+        [
+            (L("打开 Safari", "Open Safari"),
+             L("启动应用", "Launch an app")),
+            (L("音量调到 30", "Set volume to 30"),
+             L("调节系统音量", "Adjust system volume")),
+            (L("亮度调到 80", "Set brightness to 80"),
+             L("调节屏幕亮度", "Adjust screen brightness")),
+            (L("切换深色模式", "Toggle dark mode"),
+             L("切换深色/浅色外观", "Switch dark/light appearance")),
+            (L("截图", "Take a screenshot"),
+             L("启动框选截图", "Start interactive screen capture")),
+            (L("复制 hello 到剪贴板", "Copy hello to clipboard"),
+             L("写入剪贴板", "Write to clipboard")),
+            (L("锁屏", "Lock screen"),
+             L("锁定屏幕", "Lock the screen")),
+            (L("搜一下 swiftui 教程", "Search SwiftUI tutorial"),
+             L("用浏览器搜索", "Open a web search")),
+            (L("查看电量", "Check battery"),
+             L("显示当前电量", "Show battery status")),
+            (L("最小化窗口", "Minimize window"),
+             L("最小化当前窗口", "Minimize the frontmost window")),
+            (L("全屏", "Fullscreen"),
+             L("切换当前窗口全屏", "Toggle fullscreen for frontmost window")),
+            (L("关闭窗口", "Close window"),
+             L("关闭当前窗口", "Close the frontmost window")),
+            (L("提醒我两分钟后检查邮件", "Remind me to check emails in 2 minutes"),
+             L("创建 Apple 提醒", "Create an Apple Reminder")),
+            (L("向下滚动", "Scroll down"),
+             L("向下翻页", "Page down")),
+            (L("向上滚动", "Scroll up"),
+             L("向上翻页", "Page up")),
+        ]
     }
 
     @AppStorage("tf_shortTextExemption") private var shortTextExemption = "0"
