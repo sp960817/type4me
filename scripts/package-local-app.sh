@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && /bin/pwd -P)"
 APP_PATH="${APP_PATH:-/Applications/Type4Me.app}"
 APP_BUNDLE_ID="${APP_BUNDLE_ID:-com.type4me.localfixed}"
-APP_VERSION="${APP_VERSION:-1.9.3-local}"
+APP_VERSION="${APP_VERSION:-1.9.4-local}"
 APP_BUILD="${APP_BUILD:-2}"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-Type4Me Local Dev}"
 ARCH="${ARCH:-arm64}"
