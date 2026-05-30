@@ -194,13 +194,6 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
                         .padding(.top, 4)
                 }
 
-                if !selectedASRProvider.isLocal {
-                    SettingsDivider()
-                    asrUsageRow
-                }
-
-
-
             }
         }
         .task {
@@ -209,32 +202,84 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
         }
     }
 
-    // MARK: - ASR Usage Row
+    // MARK: - Local Usage
 
-    private var asrUsageRow: some View {
+    private var localUsagePanel: some View {
         let seconds = KeychainService.asrUsageSeconds
-        let hours = Int(seconds) / 3600
-        let mins = (Int(seconds) % 3600) / 60
-        let secs = Int(seconds) % 60
-        let display: String = {
-            if hours > 0 { return String(format: "%dh %02dm", hours, mins) }
-            if mins > 0 { return String(format: "%dm %02ds", mins, secs) }
-            return String(format: "%ds", secs)
-        }()
-        return HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(L("本地用量估算", "Local Usage Estimate"))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(TF.settingsText)
-                Text(L("本次安装累计识别时长", "Total recognition time since install"))
+        let usage = formattedLocalUsage(seconds)
+        let hasUsage = seconds >= 1
+
+        return HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "timer")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(TF.settingsAccentGreen)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(TF.settingsAccentGreen.opacity(0.12))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(L("本地识别用量", "Local ASR usage"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(TF.settingsText)
+
+                    Text(L("本机", "This Mac"))
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(TF.settingsAccentGreen)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(TF.settingsAccentGreen.opacity(0.10))
+                        )
+                }
+
+                Text(hasUsage
+                     ? L("仅统计本机本地引擎完成识别的录音时长", "Only completed local-engine recordings are counted")
+                     : L("开始使用本地识别后会自动累计", "Usage is counted after completed local recordings"))
                     .font(.system(size: 10))
                     .foregroundStyle(TF.settingsTextTertiary)
             }
-            Spacer()
-            Text(display)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                .foregroundStyle(TF.settingsAccentBlue)
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(usage.value)
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundStyle(TF.settingsText)
+                    .monospacedDigit()
+                Text(usage.unit)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(TF.settingsCardAlt.opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(TF.settingsAccentGreen.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    private func formattedLocalUsage(_ seconds: Double) -> (value: String, unit: String) {
+        let total = max(0, Int(seconds.rounded()))
+        let hours = total / 3600
+        let mins = (total % 3600) / 60
+        let secs = total % 60
+
+        if hours > 0 {
+            return (String(format: "%d:%02d", hours, mins), L("小时", "hours"))
+        }
+        if mins > 0 {
+            return (String(format: "%d:%02d", mins, secs), L("分钟", "minutes"))
+        }
+        return ("\(secs)", L("秒", "seconds"))
     }
 
     // MARK: - Provider Picker
@@ -445,6 +490,8 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
     private var localModelSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if localModelAvailable {
+                localUsagePanel
+
                 HStack(spacing: 12) {
                     // Left: 流式识别引擎 (always on)
                     staticEngineBlock(

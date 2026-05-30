@@ -1102,7 +1102,9 @@ actor RecognitionSession {
                 characterCount: finalText.count,
                 asrProvider: activeProvider.displayName
             ))
-            KeychainService.addASRUsage(seconds: duration)
+            if activeProvider.isLocal {
+                KeychainService.addASRUsage(seconds: duration)
+            }
 
             // Note: injectionAborted and llmFailed info is already conveyed
             // through the .finalized event's InjectionOutcome / completionMessage.
