@@ -517,6 +517,7 @@ private struct HotkeyRecordingSheet: View {
                                     RoundedRectangle(cornerRadius: 5)
                                         .fill(selected ? TF.settingsNavActive : .clear)
                                 )
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
