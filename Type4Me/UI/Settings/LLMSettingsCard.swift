@@ -61,8 +61,8 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L("禁用思考模式", "Disable Thinking"))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(TF.settingsText)
-                    Text(L("关闭后可节省 token 并加快响应", "Off saves tokens and speeds up response"))
+                        .foregroundStyle(thinkingToggleAvailable ? TF.settingsText : TF.settingsTextSecondary)
+                    Text(thinkingToggleDescription)
                         .font(.system(size: 10))
                         .foregroundStyle(TF.settingsTextTertiary)
                 }
@@ -71,6 +71,7 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
                     .toggleStyle(.switch)
                     .labelsHidden()
                     .controlSize(.small)
+                    .disabled(!thinkingToggleAvailable)
                     .onChange(of: disableThinking) { _, newValue in
                         UserDefaults.standard.set(newValue, forKey: "tf_disableThinking")
                     }
@@ -105,6 +106,27 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
         }
         .task {
             loadLLMCredentials()
+        }
+    }
+
+    private var thinkingToggleAvailable: Bool {
+        selectedLLMProvider.thinkingDisableField != nil
+    }
+
+    private var thinkingToggleDescription: String {
+        switch selectedLLMProvider {
+        case .doubao, .kimi, .deepseek:
+            return L("当前服务商会发送 thinking: disabled", "Sends thinking: disabled for this provider")
+        case .bailian:
+            return L("当前服务商会发送 enable_thinking: false", "Sends enable_thinking: false for this provider")
+        case .zhipu:
+            return L("当前服务商会发送 reasoning_effort: none", "Sends reasoning_effort: none for this provider")
+        case .ollama:
+            return L("当前服务商会发送 think: false", "Sends think: false for this provider")
+        case .minimaxCN, .minimaxIntl:
+            return L("MiniMax 不支持关闭思考，已自动分离 reasoning 内容", "MiniMax cannot disable reasoning; reasoning is separated automatically")
+        default:
+            return L("当前服务商暂无可靠关闭参数，仅会隐藏返回中的 <think> 内容", "No reliable disable parameter; returned <think> text is hidden only")
         }
     }
 

@@ -193,8 +193,10 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
                         .foregroundStyle(TF.settingsAccentAmber)
                         .padding(.top, 4)
                 }
-
             }
+
+            SettingsDivider()
+            asrUsageEstimatePanel
         }
         .task {
             loadASRCredentials()
@@ -202,9 +204,9 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
         }
     }
 
-    // MARK: - Local Usage
+    // MARK: - Usage Estimate
 
-    private var localUsagePanel: some View {
+    private var asrUsageEstimatePanel: some View {
         let seconds = KeychainService.asrUsageSeconds
         let usage = formattedLocalUsage(seconds)
         let hasUsage = seconds >= 1
@@ -221,11 +223,11 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(L("本地识别用量", "Local ASR usage"))
+                    Text(L("本机用量估算", "Local usage estimate"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(TF.settingsText)
 
-                    Text(L("本机", "This Mac"))
+                    Text(L("估算", "Estimate"))
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(TF.settingsAccentGreen)
                         .padding(.horizontal, 6)
@@ -237,8 +239,8 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
                 }
 
                 Text(hasUsage
-                     ? L("仅统计本机本地引擎完成识别的录音时长", "Only completed local-engine recordings are counted")
-                     : L("开始使用本地识别后会自动累计", "Usage is counted after completed local recordings"))
+                     ? L("此 Mac 累计完成识别的录音时长", "Completed recognition time on this Mac")
+                     : L("完成一次识别后会自动累计", "Usage is counted after completed recordings"))
                     .font(.system(size: 10))
                     .foregroundStyle(TF.settingsTextTertiary)
             }
@@ -490,8 +492,6 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
     private var localModelSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if localModelAvailable {
-                localUsagePanel
-
                 HStack(spacing: 12) {
                     // Left: 流式识别引擎 (always on)
                     staticEngineBlock(
