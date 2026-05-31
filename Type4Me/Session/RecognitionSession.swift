@@ -86,6 +86,26 @@ actor RecognitionSession {
         return KeychainService.loadLLMConfig()
     }
 
+    private func currentASRModelLabel(for provider: ASRProvider) -> String? {
+        let providerName = provider.displayName
+
+        if provider == .sherpa {
+            return "\(providerName) · \(ModelManager.selectedStreamingModel.displayName)"
+        }
+
+        guard let credentials = KeychainService.loadASRConfig(for: provider)?.toCredentials() else {
+            return providerName
+        }
+
+        let modelKeys = ["model", "resourceId", "devPid", "lmId"]
+        let model = modelKeys
+            .compactMap { credentials[$0]?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
+
+        guard let model else { return providerName }
+        return "\(providerName) · \(model)"
+    }
+
     /// Pre-initialize audio subsystem so the first recording starts instantly.
     func warmUp() { audioEngine.warmUp() }
 
@@ -595,7 +615,8 @@ actor RecognitionSession {
             finalText: message,
             status: historyStatus,
             characterCount: message.count,
-            asrProvider: activeProvider.displayName
+            asrProvider: activeProvider.displayName,
+            asrModel: currentASRModelLabel(for: activeProvider)
         ))
 
         onASREvent?(.macActionResult(message: message, status: status))
@@ -1100,7 +1121,8 @@ actor RecognitionSession {
                 finalText: finalText,
                 status: status,
                 characterCount: finalText.count,
-                asrProvider: activeProvider.displayName
+                asrProvider: activeProvider.displayName,
+                asrModel: currentASRModelLabel(for: activeProvider)
             ))
             KeychainService.addASRUsage(seconds: duration)
 

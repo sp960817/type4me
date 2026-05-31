@@ -13,6 +13,33 @@ struct HistoryRecord: Identifiable, Hashable {
     let status: String
     let characterCount: Int?
     let asrProvider: String?
+    let asrModel: String?
+
+    init(
+        id: String,
+        createdAt: Date,
+        durationSeconds: Double,
+        rawText: String,
+        processingMode: String?,
+        processedText: String?,
+        finalText: String,
+        status: String,
+        characterCount: Int?,
+        asrProvider: String?,
+        asrModel: String? = nil
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.durationSeconds = durationSeconds
+        self.rawText = rawText
+        self.processingMode = processingMode
+        self.processedText = processedText
+        self.finalText = finalText
+        self.status = status
+        self.characterCount = characterCount
+        self.asrProvider = asrProvider
+        self.asrModel = asrModel
+    }
 }
 
 // MARK: - Date Filter
@@ -83,6 +110,9 @@ struct HistoryTab: View {
     @State private var searchText = ""
     @State private var copiedId: String?
     @State private var statistics: HistoryStore.Statistics?
+    @State private var usageBreakdown: [HistoryStore.UsageBreakdown] = []
+    @State private var usageBreakdownLoading = false
+    @State private var showUsageDetails = false
 
     private static let pageSize = 50
 
@@ -503,6 +533,16 @@ struct HistoryTab: View {
         let range = dateFilter.dateRange
         let stats = await historyStore.getStatistics(from: range?.start, to: range?.end)
         statistics = stats
+        if showUsageDetails {
+            await loadUsageBreakdown()
+        }
+    }
+
+    private func loadUsageBreakdown() async {
+        usageBreakdownLoading = true
+        let rows = await historyStore.getUsageBreakdown()
+        usageBreakdown = rows
+        usageBreakdownLoading = false
     }
 
     private func loadMore() async {
@@ -844,7 +884,7 @@ struct HistoryTab: View {
 
     private func statisticsSection(stats: HistoryStore.Statistics) -> some View {
         HStack(spacing: TF.spacingMD) {
-            statCard(
+            totalDurationCard(
                 icon: "clock.fill",
                 label: L("累计时长", "Total Time"),
                 value: formatDuration(stats.totalDuration),
@@ -865,6 +905,50 @@ struct HistoryTab: View {
                 color: TF.settingsText
             )
         }
+    }
+
+    private func totalDurationCard(icon: String, label: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 10))
+                    .foregroundStyle(color)
+                Text(label)
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+
+                Spacer(minLength: 6)
+
+                Button {
+                    showUsageDetails = true
+                    Task { await loadUsageBreakdown() }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(L("详情", "Details"))
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(TF.settingsNavActive)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showUsageDetails, arrowEdge: .bottom) {
+                    usageDetailsPopover
+                        .task { await loadUsageBreakdown() }
+                }
+            }
+
+            Text(value)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(TF.settingsText)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, TF.spacingSM)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: TF.cornerSM)
+                .fill(TF.settingsBg)
+        )
     }
 
     private func statCard(icon: String, label: String, value: String, color: Color) -> some View {
@@ -891,6 +975,115 @@ struct HistoryTab: View {
         )
     }
 
+    private var usageDetailsPopover: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "timer")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(TF.settingsAccentAmber)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(TF.settingsAccentAmber.opacity(0.12))
+                    )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L("本机用量详情", "Local usage details"))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(TF.settingsText)
+                    Text(L("按识别历史中的模型/引擎估算，删除历史会同步影响统计。", "Estimated from recognition history by model/engine. Deleting history updates these totals."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+            }
+
+            if usageBreakdownLoading && usageBreakdown.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(L("正在读取用量...", "Loading usage..."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 92)
+            } else if usageBreakdown.isEmpty {
+                Text(L("还没有可统计的识别记录", "No recognition history to summarize yet"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                    .frame(maxWidth: .infinity, minHeight: 92)
+            } else {
+                VStack(spacing: 0) {
+                    usageDetailsHeader
+
+                    ForEach(usageBreakdown) { row in
+                        usageDetailsRow(row)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(TF.settingsTextTertiary.opacity(0.16), lineWidth: 1)
+                )
+            }
+        }
+        .padding(16)
+        .frame(width: 460)
+    }
+
+    private var usageDetailsHeader: some View {
+        HStack(spacing: 10) {
+            Text(L("模型 / 引擎", "Model / Engine"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(L("近1天", "1 day"))
+                .frame(width: 78, alignment: .trailing)
+            Text(L("7天", "7 days"))
+                .frame(width: 78, alignment: .trailing)
+            Text(L("30天", "30 days"))
+                .frame(width: 78, alignment: .trailing)
+        }
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(TF.settingsTextTertiary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(TF.settingsCardAlt.opacity(0.76))
+    }
+
+    private func usageDetailsRow(_ row: HistoryStore.UsageBreakdown) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.modelName)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(TF.settingsText)
+                    .lineLimit(1)
+                Text(L("\(row.recordCount) 条记录", "\(row.recordCount) records"))
+                    .font(.system(size: 9))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(formatUsageDuration(row.lastDayDuration))
+                .frame(width: 78, alignment: .trailing)
+            Text(formatUsageDuration(row.last7DaysDuration))
+                .frame(width: 78, alignment: .trailing)
+            Text(formatUsageDuration(row.last30DaysDuration))
+                .frame(width: 78, alignment: .trailing)
+        }
+        .font(.system(size: 11, weight: .medium, design: .rounded))
+        .foregroundStyle(TF.settingsText)
+        .monospacedDigit()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(TF.settingsBg)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(TF.settingsTextTertiary.opacity(0.10))
+                .frame(height: 1)
+        }
+    }
+
     private func formatDuration(_ seconds: Double) -> String {
         let hours = Int(seconds) / 3600
         let minutes = (Int(seconds) % 3600) / 60
@@ -899,6 +1092,23 @@ struct HistoryTab: View {
         } else {
             return String(format: L("%d分钟", "%dm"), minutes)
         }
+    }
+
+    private func formatUsageDuration(_ seconds: Double) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        if total == 0 { return "0s" }
+
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+
+        if hours > 0 {
+            return String(format: "%dh %02dm", hours, minutes)
+        }
+        if minutes > 0 {
+            return String(format: "%dm %02ds", minutes, secs)
+        }
+        return "\(secs)s"
     }
 
     private func formatNumber(_ number: Int) -> String {

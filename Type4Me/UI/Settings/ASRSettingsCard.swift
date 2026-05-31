@@ -194,94 +194,11 @@ struct ASRSettingsCard: View, SettingsCardHelpers {
                         .padding(.top, 4)
                 }
             }
-
-            SettingsDivider()
-            asrUsageEstimatePanel
         }
         .task {
             loadASRCredentials()
             refreshModelStatus()
         }
-    }
-
-    // MARK: - Usage Estimate
-
-    private var asrUsageEstimatePanel: some View {
-        let seconds = KeychainService.asrUsageSeconds
-        let usage = formattedLocalUsage(seconds)
-        let hasUsage = seconds >= 1
-
-        return HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "timer")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(TF.settingsAccentGreen)
-                .frame(width: 34, height: 34)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(TF.settingsAccentGreen.opacity(0.12))
-                )
-
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(L("本机用量估算", "Local usage estimate"))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(TF.settingsText)
-
-                    Text(L("估算", "Estimate"))
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(TF.settingsAccentGreen)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(TF.settingsAccentGreen.opacity(0.10))
-                        )
-                }
-
-                Text(hasUsage
-                     ? L("此 Mac 累计完成识别的录音时长", "Completed recognition time on this Mac")
-                     : L("完成一次识别后会自动累计", "Usage is counted after completed recordings"))
-                    .font(.system(size: 10))
-                    .foregroundStyle(TF.settingsTextTertiary)
-            }
-
-            Spacer(minLength: 12)
-
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(usage.value)
-                    .font(.system(size: 20, weight: .semibold, design: .rounded))
-                    .foregroundStyle(TF.settingsText)
-                    .monospacedDigit()
-                Text(usage.unit)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(TF.settingsTextTertiary)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(TF.settingsCardAlt.opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(TF.settingsAccentGreen.opacity(0.16), lineWidth: 1)
-        )
-    }
-
-    private func formattedLocalUsage(_ seconds: Double) -> (value: String, unit: String) {
-        let total = max(0, Int(seconds.rounded()))
-        let hours = total / 3600
-        let mins = (total % 3600) / 60
-        let secs = total % 60
-
-        if hours > 0 {
-            return (String(format: "%d:%02d", hours, mins), L("小时", "hours"))
-        }
-        if mins > 0 {
-            return (String(format: "%d:%02d", mins, secs), L("分钟", "minutes"))
-        }
-        return ("\(secs)", L("秒", "seconds"))
     }
 
     // MARK: - Provider Picker

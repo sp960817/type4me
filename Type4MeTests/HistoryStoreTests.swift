@@ -148,4 +148,47 @@ final class HistoryStoreTests: XCTestCase {
 
         await fulfillment(of: [notification], timeout: 1.0)
     }
+
+    func testUsageBreakdownGroupsByProviderAndPeriods() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let records: [HistoryRecord] = [
+            HistoryRecord(
+                id: "soniox-now", createdAt: now.addingTimeInterval(-60), durationSeconds: 30,
+                rawText: "a", processingMode: nil, processedText: nil,
+                finalText: "a", status: "completed", characterCount: 1, asrProvider: "Soniox",
+                asrModel: "Soniox · stt-rt-v4"
+            ),
+            HistoryRecord(
+                id: "soniox-week", createdAt: now.addingTimeInterval(-3 * 24 * 60 * 60), durationSeconds: 90,
+                rawText: "b", processingMode: nil, processedText: nil,
+                finalText: "b", status: "completed", characterCount: 1, asrProvider: "Soniox",
+                asrModel: "Soniox · stt-rt-v4"
+            ),
+            HistoryRecord(
+                id: "openai-month", createdAt: now.addingTimeInterval(-10 * 24 * 60 * 60), durationSeconds: 120,
+                rawText: "c", processingMode: nil, processedText: nil,
+                finalText: "c", status: "completed", characterCount: 1, asrProvider: "OpenAI"
+            ),
+            HistoryRecord(
+                id: "old", createdAt: now.addingTimeInterval(-40 * 24 * 60 * 60), durationSeconds: 300,
+                rawText: "d", processingMode: nil, processedText: nil,
+                finalText: "d", status: "completed", characterCount: 1, asrProvider: "Old"
+            )
+        ]
+
+        for record in records {
+            await store.insert(record)
+        }
+
+        let rows = await store.getUsageBreakdown(now: now)
+        let byModel = Dictionary(uniqueKeysWithValues: rows.map { ($0.modelName, $0) })
+
+        XCTAssertEqual(byModel["Soniox · stt-rt-v4"]?.lastDayDuration ?? 0, 30, accuracy: 0.01)
+        XCTAssertEqual(byModel["Soniox · stt-rt-v4"]?.last7DaysDuration ?? 0, 120, accuracy: 0.01)
+        XCTAssertEqual(byModel["Soniox · stt-rt-v4"]?.last30DaysDuration ?? 0, 120, accuracy: 0.01)
+        XCTAssertEqual(byModel["OpenAI"]?.lastDayDuration ?? 0, 0, accuracy: 0.01)
+        XCTAssertEqual(byModel["OpenAI"]?.last7DaysDuration ?? 0, 0, accuracy: 0.01)
+        XCTAssertEqual(byModel["OpenAI"]?.last30DaysDuration ?? 0, 120, accuracy: 0.01)
+        XCTAssertEqual(byModel["Old"]?.last30DaysDuration ?? 0, 0, accuracy: 0.01)
+    }
 }
