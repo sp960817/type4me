@@ -22,6 +22,18 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
     @State private var fetchedModelOptions: [FieldOption] = []
     @State private var isFetchingModels = false
 
+    private enum LLMCredentialItem: Identifiable {
+        case credential(CredentialField)
+        case thinkingMode
+
+        var id: String {
+            switch self {
+            case .credential(let field): return field.key
+            case .thinkingMode: return "thinkingMode"
+            }
+        }
+    }
+
     private var currentLLMFields: [CredentialField] {
         LLMProviderRegistry.configType(for: selectedLLMProvider)?.credentialFields ?? []
     }
@@ -154,7 +166,7 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
             settingsDropdown(selection: thinkingModeBinding, options: thinkingModeOptions)
                 .disabled(!thinkingToggleAvailable)
         }
-        .padding(.top, 2)
+        .padding(.vertical, 6)
     }
 
     // MARK: - Provider Picker
@@ -191,23 +203,55 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
     // MARK: - Credential Fields
 
     private var dynamicCredentialFields: some View {
-        let fields = currentLLMFields
-        let rows = stride(from: 0, to: fields.count, by: 2).map { i in
-            Array(fields[i..<min(i+2, fields.count)])
-        }
+        let rows = arrangedCredentialRows()
         return VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                 if index > 0 { SettingsDivider() }
                 HStack(alignment: .top, spacing: 16) {
-                    ForEach(row) { field in
-                        credentialFieldRow(field)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(row) { item in
+                        credentialItemRow(item)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
                     if row.count == 1 {
                         Spacer().frame(maxWidth: .infinity)
                     }
                 }
             }
+        }
+    }
+
+    private func arrangedCredentialRows() -> [[LLMCredentialItem]] {
+        let fields = currentLLMFields
+        let modelField = fields.first { $0.key == "model" }
+        let nonModelFields = fields.filter { $0.key != "model" }
+        var rows: [[LLMCredentialItem]] = []
+
+        let firstRow = nonModelFields.prefix(2).map { LLMCredentialItem.credential($0) }
+        if !firstRow.isEmpty {
+            rows.append(firstRow)
+        }
+
+        if let modelField {
+            rows.append([.credential(modelField), .thinkingMode])
+        } else {
+            rows.append([.thinkingMode])
+        }
+
+        let remaining = Array(nonModelFields.dropFirst(2)).map { LLMCredentialItem.credential($0) }
+        for index in stride(from: 0, to: remaining.count, by: 2) {
+            rows.append(Array(remaining[index..<min(index + 2, remaining.count)]))
+        }
+
+        return rows
+    }
+
+    @ViewBuilder
+    private func credentialItemRow(_ item: LLMCredentialItem) -> some View {
+        switch item {
+        case .credential(let field):
+            credentialFieldRow(field)
+        case .thinkingMode:
+            thinkingModeRow
         }
     }
 
@@ -269,9 +313,6 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
                 if customModeFields.contains(field.key) {
                     settingsField("", text: customBinding, prompt: field.placeholder)
                 }
-                if field.key == "model" {
-                    thinkingModeRow
-                }
             }
         } else if !field.options.isEmpty {
             let pickerBinding = Binding<String>(
@@ -284,12 +325,7 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
                     editedFields.insert(field.key)
                 }
             )
-            VStack(alignment: .leading, spacing: 4) {
-                settingsPickerField(field.label, selection: pickerBinding, options: field.options)
-                if field.key == "model" {
-                    thinkingModeRow
-                }
-            }
+            settingsPickerField(field.label, selection: pickerBinding, options: field.options)
         } else if field.isSecure {
             let binding = Binding<String>(
                 get: { llmCredentialValues[field.key] ?? "" },
@@ -316,12 +352,7 @@ struct LLMSettingsCard: View, SettingsCardHelpers {
                     editedFields.insert(field.key)
                 }
             )
-            VStack(alignment: .leading, spacing: 4) {
-                settingsField(field.label, text: binding, prompt: field.placeholder)
-                if field.key == "model" {
-                    thinkingModeRow
-                }
-            }
+            settingsField(field.label, text: binding, prompt: field.placeholder)
         }
     }
 
