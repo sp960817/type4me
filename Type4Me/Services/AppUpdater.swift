@@ -56,7 +56,7 @@ final class AppUpdater {
 
         currentRelease = release
         downloadedVersion = release.version
-        let url = release.resolvedDmgURL
+        let url = release.downloadURL(isLocalInstallation: isLocalInstallation)
 
         // Ensure staging directory
         try? FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
@@ -80,7 +80,7 @@ final class AppUpdater {
         guard let release = currentRelease else { return }
         state = .idle
         if resumeData != nil {
-            startDownload(url: release.resolvedDmgURL, release: release)
+            startDownload(url: release.downloadURL(isLocalInstallation: isLocalInstallation), release: release)
         } else {
             downloadUpdate(release: release)
         }
@@ -91,7 +91,7 @@ final class AppUpdater {
         guard let version = downloadedVersion else { return }
 
         state = .installing
-        let dmgPath = dmgPath(for: version)
+        let dmgPath = dmgPath(for: version, isLocal: isLocalInstallation)
 
         guard FileManager.default.fileExists(atPath: dmgPath.path) else {
             state = .failed(L("下载文件不存在", "Downloaded file not found"))
@@ -174,8 +174,9 @@ final class AppUpdater {
 
     // MARK: - Download
 
-    private func dmgPath(for version: String) -> URL {
-        stagingDir.appendingPathComponent("Type4Me-v\(version)-cloud.dmg")
+    private func dmgPath(for version: String, isLocal: Bool) -> URL {
+        let suffix = isLocal ? "local-apple-silicon" : "cloud"
+        return stagingDir.appendingPathComponent("Type4Me-v\(version)-\(suffix).dmg")
     }
 
     private func startDownload(url: URL, release: UpdateInfo) {
@@ -239,7 +240,7 @@ final class AppUpdater {
     }
 
     private func finalizeDownload(tempURL: URL, release: UpdateInfo) {
-        let destination = dmgPath(for: release.version)
+        let destination = dmgPath(for: release.version, isLocal: isLocalInstallation)
 
         // Move downloaded file to staging
         try? FileManager.default.removeItem(at: destination)
@@ -252,7 +253,8 @@ final class AppUpdater {
         }
 
         // SHA256 verification
-        if let expectedHash = release.cloudDmgSHA256, !expectedHash.isEmpty {
+        if let expectedHash = release.dmgSHA256(isLocalInstallation: isLocalInstallation),
+           !expectedHash.isEmpty {
             state = .verifying
             let actualHash = sha256(fileAt: destination)
             if actualHash?.lowercased() != expectedHash.lowercased() {

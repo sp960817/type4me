@@ -1,10 +1,27 @@
 {
-  "latest": "1.9.4",
+  "latest": "1.9.5",
   "releases": [
+    {
+      "version": "1.9.5",
+      "date": "2026-06-02",
+      "notes": "- 修复本地版应用内更新误下载云端版 DMG，导致升级后 Qwen3-ASR / SenseVoice 本地识别不可用的问题 (#184)\n- 修复火山 ASR 长时间不用后重连时可能显示误导性 WebSocket upgrade 报错的问题 (#181)\n- 修复耳机/媒体键作为快捷键时可能自动打开 Apple Music 的问题 (#180)\n- Local 版本降低 Qwen3-ASR 把热词列表当成正文输出的概率，并做保守清理/回退\n- 设置页快捷键录制弹窗扩大触发样式按钮点击区域",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.5/Type4Me-v1.9.5-cloud.dmg",
+      "cloud_dmg_size": 5643588,
+      "cloud_dmg_sha256": "2cac23982de6c5358e6d00e5bc7e5e3942c22b2e2593bc558366bc6222e26a32",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.5/Type4Me-v1.9.5-local-apple-silicon.dmg",
+      "local_dmg_size": 714099386,
+      "local_dmg_sha256": "a98c0f1bdeef9f141525dda1440eabbce5facf79933edeb8b0bef990f0ea3b15"
+    },
     {
       "version": "1.9.4",
       "date": "2026-06-01",
-      "notes": "- 新增 Mac Action 模式：用语音执行窗口管理、提醒事项、滚动等 macOS 操作\n- LLM 设置增强：支持自定义 OpenAI 兼容服务、从 /v1/models 自动发现模型，并可按服务商控制思考模式\n- 历史记录新增本机 ASR 用量详情：按模型/引擎查看近 1 天、7 天、30 天累计时长\n- 支持耳机/媒体键作为录音快捷键\n- ElevenLabs 转写更干净，并自动限制 keyterm 避免请求失败\n- Local 版本稳定性提升：修复 SenseVoice + Qwen3 长时间使用内存增长、服务重启和 MLX 兼容问题"
+      "notes": "- 新增 Mac Action 模式：用语音执行窗口管理、提醒事项、滚动等 macOS 操作\n- LLM 设置增强：支持自定义 OpenAI 兼容服务、从 /v1/models 自动发现模型，并可按服务商控制思考模式\n- 历史记录新增本机 ASR 用量详情：按模型/引擎查看近 1 天、7 天、30 天累计时长\n- 支持耳机/媒体键作为录音快捷键\n- ElevenLabs 转写更干净，并自动限制 keyterm 避免请求失败\n- Local 版本稳定性提升：修复 SenseVoice + Qwen3 长时间使用内存增长、服务重启和 MLX 兼容问题",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.4/Type4Me-v1.9.4-cloud.dmg",
+      "cloud_dmg_size": 5608976,
+      "cloud_dmg_sha256": "4f19d842ae7a2761572b549535fc4d77ae45e990848fabe55c004860ab1b7303",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.4/Type4Me-v1.9.4-local-apple-silicon.dmg",
+      "local_dmg_size": 714080818,
+      "local_dmg_sha256": "2a852ccfe96bc3b294e35a81cdf9e106efe6c920312597cfde57f73874b6ed79"
     },
     {
       "version": "1.9.3",

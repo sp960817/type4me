@@ -152,7 +152,14 @@ actor SenseVoiceWSClient: SpeechRecognizer {
         guard let (data, _) = try? await URLSession.shared.data(for: request),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let text = json["text"] as? String, !text.isEmpty else { return nil }
-        return text
+        let sanitizedText = Qwen3HotwordLeakSanitizer.sanitize(
+            text,
+            hotwords: HotwordStorage.loadEffective()
+        )
+        if sanitizedText != text {
+            DebugFileLogger.log("Qwen3 transcribe: hotword leak sanitized \(text.count)->\(sanitizedText.count) chars")
+        }
+        return sanitizedText.isEmpty ? nil : sanitizedText
     }
 
     // MARK: - Qwen3 Speculative

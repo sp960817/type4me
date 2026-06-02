@@ -65,6 +65,8 @@ actor SenseVoiceASRClient: SpeechRecognizer {
 
     /// Accumulated raw PCM audio for Qwen3 final calibration.
     private var allAudioData = Data()
+    /// Hotwords passed to Qwen3 as decoder context for this session.
+    private var calibrationHotwords: [String] = []
 
     /// Counter for samples fed to VAD since last partial recognition.
     private var samplesSinceLastPartial: Int = 0
@@ -232,6 +234,7 @@ actor SenseVoiceASRClient: SpeechRecognizer {
         samplesSkipped = 0
         speechBuffer = []
         allAudioData = Data()
+        calibrationHotwords = options.hotwords
         samplesSinceLastPartial = 0
         partialRecognitionInFlight = false
         finalized = false
@@ -517,8 +520,19 @@ actor SenseVoiceASRClient: SpeechRecognizer {
         if qwen3Enabled, let port = SenseVoiceServerManager.currentQwen3Port, allAudioData.count > 3200 {
             DebugFileLogger.log("SenseVoice endAudio: Qwen3 calibration starting (\(allAudioData.count) bytes)")
             if let calibratedText = await qwen3Calibrate(audio: allAudioData, port: port) {
-                confirmedSegments = [calibratedText]
-                DebugFileLogger.log("SenseVoice endAudio: Qwen3 calibration OK (\(calibratedText.count) chars)")
+                let senseVoiceText = confirmedSegments.joined()
+                let sanitizedText = Qwen3HotwordLeakSanitizer.sanitize(
+                    calibratedText,
+                    hotwords: calibrationHotwords,
+                    fallbackText: senseVoiceText
+                )
+                if sanitizedText != calibratedText {
+                    DebugFileLogger.log(
+                        "SenseVoice endAudio: Qwen3 hotword leak sanitized \(calibratedText.count)->\(sanitizedText.count) chars"
+                    )
+                }
+                confirmedSegments = [sanitizedText]
+                DebugFileLogger.log("SenseVoice endAudio: Qwen3 calibration OK (\(sanitizedText.count) chars)")
             } else {
                 DebugFileLogger.log("SenseVoice endAudio: Qwen3 calibration failed, using SenseVoice result")
             }
@@ -545,6 +559,7 @@ actor SenseVoiceASRClient: SpeechRecognizer {
         currentPartialText = ""
         speechBuffer = []
         allAudioData = Data()
+        calibrationHotwords = []
         vadResidualSamples = []
         logger.info("SenseVoiceASR disconnected")
     }

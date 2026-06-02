@@ -382,11 +382,13 @@ def main():
     if not Path(_model_path).exists():
         sys.exit(f"Model not found: {_model_path}")
 
-    # Load hotwords as context string for Qwen3-ASR
+    # Load hotwords as Qwen3-ASR context. The upstream decoder expects
+    # space-separated domain terms; adding labels like "Vocabulary:" makes the
+    # model more likely to echo the prompt into the transcript.
     if args.hotwords_file and Path(args.hotwords_file).exists():
         words = [w.strip() for w in Path(args.hotwords_file).read_text().splitlines() if w.strip()]
         if words:
-            _hotword_context = "Vocabulary: " + ", ".join(words)
+            _hotword_context = " ".join(words)
             print(f"Loaded {len(words)} hotwords as context", flush=True)
 
     # Warm up: eagerly load model via Session

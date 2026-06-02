@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.9.5 — 更新串包与长闲置重连修复 (2026-06-02)
+
+### Bug 修复
+- **本地版应用内更新串包 (#184)**：Local 版现在会下载 `local-apple-silicon` DMG，不再误装成云端版导致 Qwen3-ASR / SenseVoice 本地识别不可用
+- **火山 ASR 长时间不用后重连失败 (#181)**：WebSocket 首次发送失败时会用全新 URLSession 重试一次，并忽略 HTTP 探测产生的误导性 `cannot upgrade to websocket` 报错
+- **耳机/媒体键触发打开 Apple Music (#180)**：注册活跃媒体会话拦截 transport media keys，避免 macOS 自动唤起 Apple Music
+- **Qwen3 热词泄漏**：降低 Qwen3-ASR 把热词列表或 `Vocabulary` 前缀当成正文输出的概率，并在客户端做保守清理/回退
+- 设置页快捷键录制弹窗的触发样式按钮扩大点击区域，整行按钮都可点击
+
 ## v1.9.4 — Mac Action + LLM 设置增强 + Local 稳定性 (2026-06-01)
 
 ### 新功能

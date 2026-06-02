@@ -135,14 +135,15 @@ struct AboutTab: View {
         switch appUpdater.state {
         case .idle:
             if let latest = appState.availableUpdates.first {
-                let sizeText = latest.formattedSize.map { " (\($0))" } ?? ""
+                let sizeText = latest.formattedSize(isLocalInstallation: appUpdater.isLocalInstallation)
+                    .map { " (\($0))" } ?? ""
+                let buttonTitle = appUpdater.isLocalInstallation
+                    ? L("下载本地版更新\(sizeText)", "Download Local Update\(sizeText)")
+                    : L("下载更新\(sizeText)", "Download Update\(sizeText)")
                 Button {
                     appUpdater.downloadUpdate(release: latest)
                 } label: {
-                    Label(
-                        L("下载更新\(sizeText)", "Download Update\(sizeText)"),
-                        systemImage: "arrow.down.circle"
-                    )
+                    Label(buttonTitle, systemImage: "arrow.down.circle")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)

@@ -12,6 +12,16 @@ enum VolcASRError: Error, LocalizedError {
             return message ?? "HTTP \(code)"
         }
     }
+
+    static func isWebSocketUpgradeProbeMessage(_ message: String?) -> Bool {
+        guard let message = message?.lowercased(), !message.isEmpty else {
+            return false
+        }
+        return message.contains("cannot upgrade to websocket")
+            || message.contains("client is not using the websocket protocol")
+            || message.contains("upgrade token not found")
+            || message.contains("'upgrade' token not found")
+    }
 }
 
 actor VolcASRClient: SpeechRecognizer {
@@ -28,6 +38,7 @@ actor VolcASRClient: SpeechRecognizer {
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var session: URLSession?
+    private var ownsSession = false
     private var receiveTask: Task<Void, Never>?
 
     private var eventContinuation: AsyncStream<RecognitionEvent>.Continuation?
@@ -73,12 +84,6 @@ actor VolcASRClient: SpeechRecognizer {
             request.setValue(connectId, forHTTPHeaderField: "X-Api-Connect-Id")
         }
 
-        let session = options.resolvedSession
-        let task = session.webSocketTask(with: request)
-        task.resume()
-        self.session = session
-        self.webSocketTask = task
-
         // Send full_client_request (no compression, plain JSON)
         let payload = VolcProtocol.buildClientRequest(uid: volcConfig.uid, options: options)
 
@@ -89,6 +94,12 @@ actor VolcASRClient: SpeechRecognizer {
             compression: .none
         )
         let message = VolcProtocol.encodeMessage(header: header, payload: payload)
+
+        let initialSession = options.resolvedSession
+        var activeSession = initialSession
+        var activeTask = initialSession.webSocketTask(with: request)
+        var activeOwnsSession = options.bypassProxy
+        activeTask.resume()
 
         lastTranscript = .empty
         audioPacketCount = 0
@@ -101,15 +112,37 @@ actor VolcASRClient: SpeechRecognizer {
         lastServerConfirmedCount = 0
         NSLog("[ASR] Sending full_client_request (%d bytes), connectId=%@", message.count, connectId)
         do {
-            try await task.send(.data(message))
+            try await activeTask.send(.data(message))
         } catch {
-            // WebSocket handshake failed — probe with HTTP to get the real error
-            NSLog("[ASR] WebSocket send failed: %@, probing for server error...", String(describing: error))
-            if let serverError = await Self.probeServerError(request: request) {
-                throw serverError
+            // Long-idle shared URLSession sockets can fail on the first write.
+            // Retry once with a fresh session before showing a user-visible error.
+            NSLog("[ASR] WebSocket send failed: %@, retrying with fresh session...", String(describing: error))
+            activeTask.cancel(with: .goingAway, reason: nil)
+
+            let retrySession = URLSession(configuration: options.urlSessionConfiguration)
+            let retryTask = retrySession.webSocketTask(with: request)
+            retryTask.resume()
+            do {
+                try await retryTask.send(.data(message))
+                activeSession = retrySession
+                activeTask = retryTask
+                activeOwnsSession = true
+                NSLog("[ASR] WebSocket retry sent full_client_request OK")
+            } catch {
+                retryTask.cancel(with: .goingAway, reason: nil)
+                retrySession.invalidateAndCancel()
+                // WebSocket handshake failed — probe with HTTP to get real auth/vendor errors.
+                NSLog("[ASR] WebSocket retry failed: %@, probing for server error...", String(describing: error))
+                if let serverError = await Self.probeServerError(request: request) {
+                    throw serverError
+                }
+                throw error
             }
-            throw error
         }
+
+        self.session = activeSession
+        self.ownsSession = activeOwnsSession
+        self.webSocketTask = activeTask
 
         NSLog("[ASR] full_client_request sent OK")
 
@@ -144,6 +177,11 @@ actor VolcASRClient: SpeechRecognizer {
                 }
             } else if let text = String(data: data, encoding: .utf8), !text.isEmpty {
                 message = String(text.prefix(200))
+            }
+
+            if VolcASRError.isWebSocketUpgradeProbeMessage(message) {
+                NSLog("[ASR] Ignoring misleading WebSocket upgrade probe response: %@", message ?? "")
+                return nil
             }
 
             NSLog("[ASR] HTTP probe got %d: %@", httpResponse.statusCode, message ?? "(no body)")
@@ -203,6 +241,10 @@ actor VolcASRClient: SpeechRecognizer {
         receiveTask = nil
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
+        if ownsSession {
+            session?.invalidateAndCancel()
+        }
+        ownsSession = false
         // Don't invalidate shared session — just release our reference
         session = nil
         eventContinuation?.finish()
@@ -320,7 +362,7 @@ actor VolcASRClient: SpeechRecognizer {
     }
 
     private func makeTranscript(from result: VolcASRResult, isFinal: Bool) -> RecognitionTranscript {
-        var serverConfirmed = result.utterances
+        let serverConfirmed = result.utterances
             .filter(\.definite)
             .map(\.text)
             .filter { !$0.isEmpty }
