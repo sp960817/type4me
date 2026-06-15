@@ -1669,25 +1669,39 @@ actor RecognitionSession {
 
 // MARK: - String helpers
 
-private extension String {
+// `internal` (not `private`) so the text-normalization rules can be unit-tested
+// via `@testable import Type4Me` (see RecognitionSessionTests).
+extension String {
     /// Collapse runs of 2+ spaces into a single space.
     /// LLMs sometimes insert extra spaces between CJK and Latin text.
     var collapsingExtraSpaces: String {
         replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
     }
 
-    /// Remove unwanted spaces around CJK characters.
-    /// Chinese text never uses inter-word spaces, so any space adjacent to a
-    /// CJK character is noise from ASR token boundaries or LLM formatting.
-    /// Two rules cover all 5 CJK-involving combinations (中↔中, 中↔英, 英↔中,
-    /// 中↔符, 符↔中) while leaving pure English "hello world" intact.
+    /// Remove spurious spaces that hug a CJK character, while preserving the
+    /// space between a CJK character and an adjacent Latin letter or digit
+    /// (Pangu spacing, e.g. "最新的 prompt 提交" stays intact — see issue #186).
+    ///
+    /// Chinese text uses no inter-word spaces, so a space between two CJK
+    /// characters — or between a CJK character and punctuation — is noise from
+    /// ASR token boundaries or LLM formatting and is removed (中↔中, 中↔符,
+    /// 符↔中). A space between a CJK character and an ASCII letter/digit is
+    /// intentional and is kept (中↔英, 英↔中, 中↔数). Pure English
+    /// "hello world" is untouched.
     var removingCJKLatinSpaces: String {
         let cjk = "[\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF]"
+        // A neighbour that should hug the CJK character with no space: anything
+        // that is neither whitespace nor an ASCII letter/digit (i.e. another CJK
+        // char, punctuation, or a symbol). Latin letters/digits are excluded so
+        // Pangu spacing is preserved.
+        let glue = "[^\\sA-Za-z0-9]"
         var s = self
-        // Space after CJK, before any non-whitespace: "你 好" / "你 ," → "你好" / "你,"
-        s = s.replacingOccurrences(of: "(?<=\(cjk)) +(?=\\S)", with: "", options: .regularExpression)
-        // Space before CJK, after any non-whitespace: ", 你" / "Max 你" → ",你" / "Max你"
-        s = s.replacingOccurrences(of: "(?<=\\S) +(?=\(cjk))", with: "", options: .regularExpression)
+        // Space after CJK, before a non-letter/digit: "你 好" / "你 ，" → "你好" / "你，"
+        // ("最新的 prompt" keeps its space because 'p' is a letter.)
+        s = s.replacingOccurrences(of: "(?<=\(cjk)) +(?=\(glue))", with: "", options: .regularExpression)
+        // Space before CJK, after a non-letter/digit: "， 你" → "，你"
+        // ("Max 你" / "3 个" keep their space because 'x' / '3' are letter/digit.)
+        s = s.replacingOccurrences(of: "(?<=\(glue)) +(?=\(cjk))", with: "", options: .regularExpression)
         return s
     }
 
