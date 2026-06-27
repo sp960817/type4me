@@ -42,8 +42,16 @@ sensevoice-server/.venv/
 # Large model files
 sensevoice-server/models/
 
-# Windows (removed, macOS-only project)
-windows/
+# Windows build artifacts
+windows/**/bin/
+windows/**/obj/
+windows/publish/
+windows/ui-audit/
+windows/**/*.log
+windows/**/*.zip
+windows/**/*.msix
+windows/**/*.nupkg
+windows/**/*.snupkg
 
 # Test artifacts
 test-audio/

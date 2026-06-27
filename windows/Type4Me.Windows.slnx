@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Type4Me.Win.Tests/Type4Me.Win.Tests.csproj" />
+  <Project Path="Type4Me.Win/Type4Me.Win.csproj" />
+</Solution>

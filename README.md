@@ -24,6 +24,12 @@
 
 ## 立即体验
 
+### Windows 11 适配版
+
+Windows 11 x64 预览版已放在 `windows/` 目录，下载和运行方式见 [windows/README.md](windows/README.md)。
+
+声明：Windows 发布包不包含任何 App ID、Access Token、API Key 或个人配置。语音识别和 LLM 都需要使用者自行填入自己的服务商配置；本机配置、历史记录和日志默认保存在 `%APPDATA%\Type4Me\`。
+
 **方式一：直接下载DMG（推荐）**
 
 两个版本，共享配置文件，可随时替换安装：  
